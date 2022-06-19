@@ -1,3 +1,4 @@
 numpy==1.21.3
+pytest==7.0.1
 simhash==2.1.2
 tqdm==4.62.3
