@@ -6,16 +6,20 @@ Defaults to current directory.
 """
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Any
 from typing import Dict
+from typing import List
 
 import numpy as np
 import simhash  # type: ignore
 from tqdm import tqdm  # type: ignore
 
+DEFAULT_MAX_RESULTS = 1000
 
-def parse_arguments() -> Dict[str, Any]:
+
+def parse_arguments(args: List[str]) -> Dict[str, Any]:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "dir",
@@ -27,23 +31,25 @@ def parse_arguments() -> Dict[str, Any]:
         "--max-results",
         "-n",
         type=int,
-        default=1000,
+        default=DEFAULT_MAX_RESULTS,
         help="maximum number of results to return",
     )
     parser.add_argument(
         "--max-depth",
         "-d",
         type=int,
-        help="maximum number of subdirectories to traverse",
-        default=0,
+        help=(
+            "maximum number of subdirectories to traverse - no limit if "
+            "unspecified"
+        ),
     )
 
-    args = parser.parse_args()
+    parsed_args = parser.parse_args(args)
 
     return {
-        "dir_path": Path(args.dir),
-        "n_results": args.max_results,
-        "max_depth": args.max_depth,
+        "dir_path": Path(parsed_args.dir),
+        "n_results": parsed_args.max_results,
+        "max_depth": parsed_args.max_depth,
     }
 
 
@@ -61,7 +67,7 @@ def count_bits(n: np.ndarray) -> np.ndarray:
     return n
 
 
-def main(dir_path, n_results, max_depth) -> None:
+def main(dir_path: Path, n_results: int, max_depth: int) -> None:
     all_fn = [
         fn
         for fn in dir_path.glob("**/*")
@@ -116,5 +122,5 @@ def main(dir_path, n_results, max_depth) -> None:
 
 
 if __name__ == "__main__":
-    args_dict = parse_arguments()
+    args_dict = parse_arguments(sys.argv[1:])
     main(**args_dict)
