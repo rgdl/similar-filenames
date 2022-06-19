@@ -6,17 +6,22 @@ Defaults to current directory.
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import Optional
+from typing import Tuple
 
 import numpy as np
+import pandas as pd  # type: ignore
 import simhash  # type: ignore
 from tqdm import tqdm  # type: ignore
 
 DEFAULT_MAX_RESULTS = 1000
+DEFAULT_IGNORE = (".DS_Store",)
 
 
 def parse_arguments(args: List[str]) -> Dict[str, Any]:
@@ -47,7 +52,7 @@ def parse_arguments(args: List[str]) -> Dict[str, Any]:
     parsed_args = parser.parse_args(args)
 
     return {
-        "dir_path": Path(parsed_args.dir),
+        "path": Path(parsed_args.dir),
         "n_results": parsed_args.max_results,
         "max_depth": parsed_args.max_depth,
     }
@@ -55,6 +60,10 @@ def parse_arguments(args: List[str]) -> Dict[str, Any]:
 
 def count_bits(n: np.ndarray) -> np.ndarray:
     """
+    Count the number of 1s in the binary representation of integers.
+
+    Works on numpy arrays in a vectorised fashion.
+
     No idea how this works. Copied from here:
     https://stackoverflow.com/questions/9829578/
     """
@@ -67,58 +76,83 @@ def count_bits(n: np.ndarray) -> np.ndarray:
     return n
 
 
-def main(dir_path: Path, n_results: int, max_depth: int) -> None:
-    all_fn = [
-        fn
-        for fn in dir_path.glob("**/*")
-        if all(
+# TODO: looks like it's no longer rejecting directories - write tests for this
+def find_all_files(
+    path: Path,
+    max_depth: Optional[int] = None,
+    ignore: Tuple[str] = DEFAULT_IGNORE,
+) -> List[Path]:
+    """
+    Recursively find all files in `path`, provided their name is not listed in
+    `ignore`. Don't look more than `max_depth` directories deep. If `max_depth`
+    is None, search depth is unlimited.
+    """
+    all_files = []
+    for fn in path.glob("**/*"):
+        fn = fn.relative_to(path)
+        if any(
             [
-                not fn.is_dir(),
-                len(fn.parts) <= max_depth,
-                fn.name not in (".DS_Store",),
+                fn.is_dir(),
+                fn.name in ignore,
+                max_depth is not None and len(fn.parts) > max_depth,
             ]
-        )
-    ]
-    distinct_fn = set(fn.name for fn in all_fn)
-    hash_dict = {str(fn): simhash.Simhash(fn).value for fn in distinct_fn}
+        ):
+            continue
+        all_files.append(fn)
+    return all_files
 
-    all_f1 = []
-    all_f2 = []
-    hash1 = []
-    hash2 = []
 
-    for i, f1 in tqdm(list(enumerate(all_fn)), desc="Hashing"):
-        for f2 in all_fn[i + 1 :]:
-            all_f1.append(f1)
-            all_f2.append(f2)
-            hash1.append(hash_dict[str(f1.name)])
-            hash2.append(hash_dict[str(f2.name)])
-
-    hash_diff = np.array(hash1, dtype=np.uint64) ^ np.array(
-        hash2, dtype=np.uint64
+def hash_distances(hash_1: List[int], hash_2: List[int]) -> List[int]:
+    """
+    Given two equal-length lists of hashes, count the number of bits that
+    differ, element-wise.
+    """
+    assert len(hash_1) == len(hash_2)
+    hash_diff = np.array(hash_1, dtype=np.uint64) ^ np.array(
+        hash_2, dtype=np.uint64
     )
-    hash_diff_count = count_bits(hash_diff)
-    hash_diff_count_order = hash_diff_count.argsort()
+    return count_bits(hash_diff).tolist()
 
-    n_results = min(n_results, len(all_f1))
 
-    if n_results:
-        print()
-        print(n_results, "most similar pairs of filenames:")
+def build_results_dataframe(files: List[Path]) -> pd.DataFrame:
+    """
+    Build a dataframe containing all possible filename pairings and the
+    distance measure corresponding to each
+    """
+    distinct_file_names = {file.name for file in files}
+    hash_dict = {
+        file_name: simhash.Simhash(file_name).value
+        for file_name in distinct_file_names
+    }
 
-        for i in reversed(range(n_results)):
-            ind = hash_diff_count_order[i]
-            print("\n***\n")
-            print(all_f1[ind])
-            print(all_f2[ind])
-            print()
-            print(
-                "# Similarity Hashes differ by", hash_diff_count[ind], "bits"
-            )
-        print()
-    else:
-        print()
-        print("No files found")
+    file_1, file_2, hash_1, hash_2 = [], [], [], []
+
+    for i, f1 in tqdm(list(enumerate(files))):
+        for f2 in files[i + 1 :]:
+            file_1.append(str(f1))
+            file_2.append(str(f2))
+            hash_1.append(hash_dict[f1.name])
+            hash_2.append(hash_dict[f2.name])
+
+    return pd.DataFrame(
+        {
+            "file_1": file_1,
+            "file_2": file_2,
+            "distance": hash_distances(hash_1, hash_2),
+        }
+    ).sort_values("distance").reset_index(drop=True)
+
+
+def main(path: Path, n_results: int, max_depth: Optional[int]) -> None:
+    all_files = find_all_files(path, max_depth)
+    results = build_results_dataframe(all_files).head(n_results)
+    if results.empty:
+        msg = f"No files found in '{path}'"
+        if max_depth is not None:
+            msg += f" at a search depth of {max_depth}"
+        print(msg, file=sys.stderr)
+    data = results.to_json(orient="records")
+    print(json.dumps(json.loads(data), indent=4))
 
 
 if __name__ == "__main__":

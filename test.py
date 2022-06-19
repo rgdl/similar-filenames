@@ -7,7 +7,7 @@ from similar_filenames import parse_arguments
 def test_default_argument_parsing():
     args_dict = parse_arguments([])
     expected = {
-        "dir_path": Path(),
+        "path": Path(),
         "n_results": DEFAULT_MAX_RESULTS,
         "max_depth": None,
     }
