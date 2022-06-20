@@ -10,7 +10,7 @@ from similar_filenames import parse_arguments
 
 
 def test_default_argument_parsing():
-    args_dict = parse_arguments([])
+    args_dict = parse_arguments(["."])
     expected = {
         "path": Path(),
         "n_results": DEFAULT_MAX_RESULTS,

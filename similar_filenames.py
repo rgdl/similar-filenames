@@ -2,7 +2,6 @@
 
 """
 Given a directory, return the most similar filenames.
-Defaults to current directory.
 """
 
 import argparse
@@ -28,8 +27,6 @@ def parse_arguments(args: List[str]) -> Dict[str, Any]:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "dir",
-        nargs="?",
-        default=Path(),
         help="directory to begin search from",
     )
     parser.add_argument(
