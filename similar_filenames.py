@@ -76,7 +76,6 @@ def count_bits(n: np.ndarray) -> np.ndarray:
     return n
 
 
-# TODO: looks like it's no longer rejecting directories - write tests for this
 def find_all_files(
     path: Path,
     max_depth: Optional[int] = None,
@@ -89,14 +88,10 @@ def find_all_files(
     """
     all_files = []
     for fn in path.glob("**/*"):
+        if fn.is_dir() or fn.name in ignore:
+            continue
         fn = fn.relative_to(path)
-        if any(
-            [
-                fn.is_dir(),
-                fn.name in ignore,
-                max_depth is not None and len(fn.parts) > max_depth,
-            ]
-        ):
+        if max_depth is not None and len(fn.parts) > max_depth:
             continue
         all_files.append(fn)
     return all_files
@@ -134,23 +129,29 @@ def build_results_dataframe(files: List[Path]) -> pd.DataFrame:
             hash_1.append(hash_dict[f1.name])
             hash_2.append(hash_dict[f2.name])
 
-    return pd.DataFrame(
-        {
-            "file_1": file_1,
-            "file_2": file_2,
-            "distance": hash_distances(hash_1, hash_2),
-        }
-    ).sort_values("distance").reset_index(drop=True)
+    return (
+        pd.DataFrame(
+            {
+                "file_1": file_1,
+                "file_2": file_2,
+                "distance": hash_distances(hash_1, hash_2),
+            }
+        )
+        .sort_values("distance")
+        .reset_index(drop=True)
+    )
 
 
 def main(path: Path, n_results: int, max_depth: Optional[int]) -> None:
     all_files = find_all_files(path, max_depth)
     results = build_results_dataframe(all_files).head(n_results)
+
     if results.empty:
         msg = f"No files found in '{path}'"
         if max_depth is not None:
             msg += f" at a search depth of {max_depth}"
         print(msg, file=sys.stderr)
+
     data = results.to_json(orient="records")
     print(json.dumps(json.loads(data), indent=4))
 
