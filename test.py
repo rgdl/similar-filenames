@@ -26,15 +26,20 @@ def _setup_find_all_files(**kwargs) -> Tuple[Set[Path], Set[Path], List[Path]]:
     """
     with TemporaryDirectory() as _td:
         td = Path(_td)
+
+        # 3 directories, one of which is nested
         dirs = ((td / "dir1"), (td / "dir2"), (td / "dir1/dir3"))
         for _dir in dirs:
             _dir.mkdir()
             assert _dir.exists()
+
+        # a file in each directory
         files = tuple((_dir / f"file{i+1}") for i, _dir in enumerate(dirs))
         for file in files:
             file.touch()
             assert file.exists()
 
+        # results
         found_files = find_all_files(td, **kwargs)
         return (
             {_dir.relative_to(td) for _dir in dirs},
@@ -45,4 +50,15 @@ def _setup_find_all_files(**kwargs) -> Tuple[Set[Path], Set[Path], List[Path]]:
 
 def test_find_files_but_not_directories():
     dirs, files, found_files = _setup_find_all_files()
+    assert files == set(found_files)
+
+
+def test_find_files_depth():
+    dirs, files, found_files = _setup_find_all_files(max_depth=0)
+    assert found_files == []
+
+    dirs, files, found_files = _setup_find_all_files(max_depth=1)
+    assert {file.name for file in found_files} == {"file1", "file2"}
+
+    dirs, files, found_files = _setup_find_all_files(max_depth=2)
     assert files == set(found_files)

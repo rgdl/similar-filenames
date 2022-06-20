@@ -91,7 +91,7 @@ def find_all_files(
         if fn.is_dir() or fn.name in ignore:
             continue
         fn = fn.relative_to(path)
-        if max_depth is not None and len(fn.parts) > max_depth:
+        if max_depth is not None and len(fn.parts) - 1 > max_depth:
             continue
         all_files.append(fn)
     return all_files
